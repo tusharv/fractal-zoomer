@@ -13,6 +13,7 @@ package com.neave.fractal
 			drawCrosshair(size, 1, 0xffffff, 1);
 			filters = [ new GlowFilter(0x000000, 0.5, 4, 4, 1, 2) ];
 			cacheAsBitmap = true;
+			mouseEnabled = false;
 		}
 		
 		private function drawCrosshair(size:uint, thickness:uint, color:uint, alpha:Number):void

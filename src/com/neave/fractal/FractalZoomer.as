@@ -2,9 +2,7 @@
 {
 	import flash.display.Bitmap;
 	import flash.display.BitmapData;
-	import flash.display.Stage;
-	import flash.display.StageAlign;
-	import flash.display.StageScaleMode;
+	import flash.display.Sprite;
 	import flash.events.Event;
 	import flash.events.KeyboardEvent;
 	import flash.events.MouseEvent;
@@ -15,19 +13,21 @@
 	import flash.ui.Keyboard;
 	import flash.ui.Mouse;
 	import flash.ui.MouseCursor;
+	import flash.ui.Multitouch;
 	import flash.utils.Timer;
 
-	public final class FractalZoomer
+	public final class FractalZoomer extends Sprite
 	{
 		// Main constants
-		private const ZOOM_INC:Number = 1.125; // The amount to increment when zooming in
+		private const IS_TOUCH:Boolean = Multitouch.supportsTouchEvents;
+		private const ZOOM_INC:Number = IS_TOUCH ? 2 : 1.125; // The amount to increment when zooming in
 		private const MIN_ZOOM:Number = 6; // Start at a higher zoom level
 		private const KEY_STEP:uint = 16; // How much to pan with each key press
 		private const TILE_SIZE:uint = 64; // The bitamp is split into tiles of this size
 		
 		// Main variables
-		private var stage:Stage;
-		private var crosshair:Crosshair;
+		private var fractalWidth:uint;
+		private var fractalHeight:uint;
 		private var drawComplete:Boolean;
 		private var dragBitmap:Boolean;
 		private var dragPoint:Point;
@@ -45,34 +45,39 @@
 		private var bitmapData:BitmapData;
 		private var bitmapX:int;
 		private var bitmapY:int;
+		private var crosshair:Crosshair;
+		private var zoomInButton:ZoomButton;
+		private var zoomOutButton:ZoomButton;
 		
-		public function FractalZoomer(stage:Stage)
+		public function FractalZoomer(fractalWidth:uint = 512, fractalHeight:uint = 512)
 		{
-			this.stage = stage;
+			this.fractalWidth = fractalWidth;
+			this.fractalHeight = fractalHeight;
 			
-			initStage();
+			addEventListener(Event.ADDED_TO_STAGE, onAddedToStage);
+		}
+		
+		private function onAddedToStage(event:Event):void
+		{
+			removeEventListener(Event.ADDED_TO_STAGE, onAddedToStage);
+			addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
+			addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			addEventListener(MouseEvent.MOUSE_OUT, onMouseUp);
+			addEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
+			stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+			stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp);
+			
 			initMandelbrot();
+			initCrosshair();
+			initZoomButtons();
 			initTimer();
-			addCrosshair();
-			onResize(null);
 			
+			setSize(fractalWidth, fractalHeight);
 			setTileOrder();
 			drawFirstTile();
 			
 			Mouse.cursor = MouseCursor.HAND;
-		}
-		
-		private function initStage():void
-		{
-			stage.align = StageAlign.TOP_LEFT;
-			stage.scaleMode = StageScaleMode.NO_SCALE;
-			stage.addEventListener(Event.RESIZE, onResize);
-			stage.addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
-			stage.addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
-			stage.addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
-			stage.addEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
-			stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
-			stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp);
 		}
 		
 		private function initMandelbrot():void
@@ -80,7 +85,7 @@
 			setColsRows();
 			bitmap = new Bitmap();
 			initBitmap();
-			stage.addChild(bitmap);
+			addChild(bitmap);
 			
 			mb = new MandelbrotSet(bitmapData, 0, -0.6, 1);
 			mb.addEventListener(MandelbrotSet.DRAW_COMPLETED, onDrawCompleted);
@@ -89,18 +94,33 @@
 		
 		private function setColsRows():void
 		{
-			tileColumns = Math.ceil(stage.stageWidth / TILE_SIZE);
-			tileRows = Math.ceil(stage.stageHeight / TILE_SIZE);
+			tileColumns = Math.ceil(fractalWidth / TILE_SIZE);
+			tileRows = Math.ceil(fractalHeight / TILE_SIZE);
 		}
 		
 		private function initBitmap():void
 		{
+			// Create a copy of the old bitmap data
+			var oldBitmapData:BitmapData;
+			if (bitmapData !== null)
+			{
+				oldBitmapData = bitmapData.clone();
+			}
+			
+			// Create the new size bitmap data
 			bitmapData = bitmap.bitmapData = new BitmapData(tileColumns * TILE_SIZE, tileRows * TILE_SIZE, false, 0xff000a00);
+			
+			// Copy the old bitmap data into the new bitmap data
+			if (oldBitmapData !== null)
+			{
+				bitmapData.copyPixels(oldBitmapData, oldBitmapData.rect, new Point((bitmapData.width - oldBitmapData.width) / 2, (bitmapData.height - oldBitmapData.height) / 2));
+				oldBitmapData.dispose();
+			}
 		}
 		
 		private function initTimer():void
 		{
-			// Update display as often as possible
+			// Update render as often as possible
 			timer = new Timer(1, 0);
 			timer.addEventListener(TimerEvent.TIMER, update);
 			
@@ -109,10 +129,47 @@
 			keyTimer.addEventListener(TimerEvent.TIMER, keyUpdate);
 		}
 		
-		private function addCrosshair():void
+		private function initCrosshair():void
 		{
 			crosshair = new Crosshair();
-			stage.addChild(crosshair);
+			addChild(crosshair);
+		}
+		
+		private function initZoomButtons():void
+		{
+			zoomInButton = new ZoomButton(true);
+			zoomInButton.addEventListener(MouseEvent.MOUSE_DOWN, onZoomInPress);
+			zoomInButton.addEventListener(MouseEvent.MOUSE_UP, onZoomRelease);
+			zoomInButton.addEventListener(MouseEvent.MOUSE_OUT, onZoomRelease);
+			addChild(zoomInButton);
+			
+			zoomOutButton = new ZoomButton(false);
+			zoomOutButton.addEventListener(MouseEvent.MOUSE_DOWN, onZoomOutPress);
+			zoomOutButton.addEventListener(MouseEvent.MOUSE_UP, onZoomRelease);
+			zoomOutButton.addEventListener(MouseEvent.MOUSE_OUT, onZoomRelease);
+			addChild(zoomOutButton);
+		}
+		
+		private function onZoomInPress(event:MouseEvent):void
+		{
+			event.stopPropagation();
+			keyZ = ZOOM_INC;
+			keyTimer.start();
+		}
+		
+		private function onZoomOutPress(event:MouseEvent):void
+		{
+			event.stopPropagation();
+			keyZ = 1 / ZOOM_INC;
+			keyTimer.start();
+		}
+		
+		private function onZoomRelease(event:MouseEvent):void
+		{
+			event.stopPropagation();
+			keyZ = 1;
+			keyTimer.reset();
+			keyTimer.stop();
 		}
 		
 		private function setTileOrder():void
@@ -212,29 +269,29 @@
 			bitmapData.unlock();
 		}
 		
-		public function zoomIn():void
+		public function zoomIn(dz:Number):void
 		{
 			// Only redraw if zoom value has changed
 			var mbz:Number = mb.z;
-			zoom(ZOOM_INC);
+			zoom(dz);
 			if (mb.z != mbz) drawFirstTile();
 		}
 		
-		public function zoomOut():void
+		public function zoomOut(dz:Number):void
 		{
 			// Only redraw if zoom value has changed
 			var mbz:Number = mb.z;
-			zoom(1 / ZOOM_INC);
+			zoom(1 / dz);
 			if (mb.z != mbz) drawFirstTile();
 		}
 		
-		private function pan(x:Number, y:Number):void
+		public function pan(dx:Number, dy:Number):void
 		{
 			bitmapData.lock();
 			
 			var panSrc:BitmapData = bitmapData.clone();
 			var m:Matrix = new Matrix();
-			m.translate(x, y);
+			m.translate(dx, dy);
 			
 			// Redraw the bitmap into this position
 			clearBitmap();
@@ -247,15 +304,15 @@
 		private function onMouseDown(event:MouseEvent):void
 		{
 			dragBitmap = true;
-			dragPoint = new Point(stage.mouseX, stage.mouseY);
+			dragPoint = new Point(int(event.localX), int(event.localY));
 		}
 		
 		private function onMouseMove(event:MouseEvent):void
 		{
 			if (!dragBitmap) return;
 			
-			bitmap.x = int(stage.mouseX - dragPoint.x + bitmapX);
-			bitmap.y = int(stage.mouseY - dragPoint.y + bitmapY);
+			bitmap.x = int(event.localX) - dragPoint.x + bitmapX;
+			bitmap.y = int(event.localY) - dragPoint.y + bitmapY;
 			event.updateAfterEvent();
 		}
 		
@@ -267,10 +324,12 @@
 			dragBitmap = false;
 			bitmap.x = bitmapX;
 			bitmap.y = bitmapY;
+			var mx:int = event.localX;
+			var my:int = event.localY;
 			
 			// Redraw the bitmap in this position
-			var dx:int = int(dragPoint.x - stage.mouseX);
-			var dy:int = int(dragPoint.y - stage.mouseY);
+			var dx:int = dragPoint.x - mx;
+			var dy:int = dragPoint.y - my;
 			if (dx != 0 || dy != 0)
 			{
 				// Dragging occured, redraw the bitmap
@@ -281,9 +340,9 @@
 			else
 			{
 				// No dragging occured so instead re-center the view on mouse click position
-				mb.x += (stage.mouseX * 2 - stage.stageWidth) / (TILE_SIZE * mb.z);
-				mb.y += (stage.mouseY * 2 - stage.stageHeight) / (TILE_SIZE * mb.z);
-				pan(stage.stageWidth / 2 - stage.mouseX, stage.stageHeight / 2 - stage.mouseY);
+				mb.x += (mx * 2 - fractalWidth) / (TILE_SIZE * mb.z);
+				mb.y += (my * 2 - fractalHeight) / (TILE_SIZE * mb.z);
+				pan(fractalWidth / 2 - mx, fractalHeight / 2 - my);
 			}
 			
 			drawFirstTile();
@@ -291,8 +350,8 @@
 		
 		private function onMouseWheel(event:MouseEvent):void
 		{
-			if (event.delta > 0) zoomIn();
-			else zoomOut();
+			if (event.delta > 0) zoomIn(ZOOM_INC);
+			else zoomOut(ZOOM_INC);
 		}
 		
 		private function onKeyDown(event:KeyboardEvent):void
@@ -352,6 +411,11 @@
 				case Keyboard.NUMPAD_SUBTRACT:
 					keyZ = 1;
 					break;
+				
+				case Keyboard.C:
+					if (contains(crosshair)) removeChild(crosshair);
+					else addChild(crosshair);
+					break;
 			}
 			
 			if (keyX == 0 && keyY == 0 && keyZ == 1)
@@ -368,6 +432,9 @@
 		
 		private function update(event:TimerEvent):void
 		{
+			// Don't update on mobile whilst dragging
+			if (IS_TOUCH && dragBitmap) return;
+			
 			// Only draw the next tile when the current tile has finished drawing
 			if (drawComplete)
 			{
@@ -395,19 +462,34 @@
 			}
 		}
 		
-		private function onResize(event:Event):void
+		private function updateSize(fractalWidth:uint, fractalHeight:uint):void
 		{
-			// Re-center crosshair
-			crosshair.x = stage.stageWidth / 2;
-			crosshair.y = stage.stageHeight / 2;
+			this.fractalWidth = fractalWidth;
+			this.fractalHeight = fractalHeight;
 			
-			// Re-center bitmap
-			bitmap.x = bitmapX = (tileColumns - (stage.stageWidth / TILE_SIZE)) * TILE_SIZE / -2;
-			bitmap.y = bitmapY = (tileRows - (stage.stageHeight / TILE_SIZE)) * TILE_SIZE / -2;
+			// Re-center crosshair
+			crosshair.x = Math.round(fractalWidth * 0.5);
+			crosshair.y = Math.round(fractalHeight * 0.5);
+			
+			// Position zoom buttons
+			zoomInButton.x = (fractalWidth - 50) / 2 - 35;
+			zoomOutButton.x = (fractalWidth - 50) / 2 + 35;
+			zoomInButton.y = zoomOutButton.y = fractalHeight - (fractalHeight < 500 ? 65 : 100);
+			
+			scrollRect = new Rectangle(0, 0, fractalWidth, fractalHeight);
+		}
+		
+		public function setSize(fractalWidth:uint, fractalHeight:uint):void
+		{
+			updateSize(fractalWidth, fractalHeight);
 			
 			var oldCols:uint = tileColumns;
 			var oldRows:uint = tileRows;
 			setColsRows();
+			
+			// Re-center bitmap
+			bitmap.x = bitmapX = (tileColumns - (fractalWidth / TILE_SIZE)) * TILE_SIZE * -0.5;
+			bitmap.y = bitmapY = (tileRows - (fractalHeight / TILE_SIZE)) * TILE_SIZE * -0.5;
 			
 			// Don't change anything if the number of tiles are the same
 			if (tileColumns == oldCols && tileRows == oldRows) return;
@@ -439,17 +521,25 @@
 		public function dispose():void
 		{
 			mb.removeEventListener(MandelbrotSet.DRAW_COMPLETED, onDrawCompleted);
+			
 			timer.stop();
 			timer.removeEventListener(TimerEvent.TIMER, update);
+			
 			keyTimer.stop();
 			keyTimer.removeEventListener(TimerEvent.TIMER, keyUpdate);
-			stage.removeEventListener(Event.RESIZE, onResize);
-			stage.removeEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
-			stage.removeEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
-			stage.removeEventListener(MouseEvent.MOUSE_UP, onMouseUp);
-			stage.removeEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
-			stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
-			stage.removeEventListener(KeyboardEvent.KEY_UP, onKeyUp);
+			
+			removeEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
+			removeEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
+			removeEventListener(MouseEvent.MOUSE_UP, onMouseUp);
+			removeEventListener(MouseEvent.MOUSE_OUT, onMouseUp);
+			removeEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
+			
+			if (stage !== null)
+			{
+				stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+				stage.removeEventListener(KeyboardEvent.KEY_UP, onKeyUp);
+			}
+			
 			bitmapData.dispose();
 			bitmapData = null;
 		}
