@@ -24,7 +24,7 @@
 			stage.addEventListener(Event.RESIZE, resizeFractal);			
 		}
 		
-		private function resizeFractal(event:Event = null):void
+		private function resizeFractal(event:Event):void
 		{
 			fractal.setSize(stage.stageWidth, stage.stageHeight);
 		}

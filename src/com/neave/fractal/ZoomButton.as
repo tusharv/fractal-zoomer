@@ -5,8 +5,11 @@ package com.neave.fractal
 	import flash.display.Graphics;
 	import flash.display.Shape;
 	import flash.display.SimpleButton;
+	import flash.events.MouseEvent;
 	import flash.filters.GlowFilter;
 	import flash.geom.Matrix;
+	import flash.ui.Mouse;
+	import flash.ui.MouseCursor;
 	
 	public final class ZoomButton extends SimpleButton
 	{
@@ -16,7 +19,20 @@ package com.neave.fractal
 		{
 			this.plusIcon = plusIcon;
 			
+			addEventListener(MouseEvent.MOUSE_OVER, onMouseOver);
+			addEventListener(MouseEvent.MOUSE_OUT, onMouseOut);
+			
 			super(drawUpState(), drawOverState(), drawDownState(), drawButtonShape());
+		}
+		
+		private function onMouseOver(event:MouseEvent):void
+		{
+			Mouse.cursor = MouseCursor.BUTTON;
+		}
+		
+		private function onMouseOut(event:MouseEvent):void
+		{
+			Mouse.cursor = MouseCursor.HAND;
 		}
 		
 		private function drawIcon(graphics:Graphics):void
