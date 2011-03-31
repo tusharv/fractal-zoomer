@@ -60,11 +60,12 @@
 		private function onAddedToStage(event:Event):void
 		{
 			removeEventListener(Event.ADDED_TO_STAGE, onAddedToStage);
+			addEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
 			addEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
 			addEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
 			addEventListener(MouseEvent.MOUSE_UP, onMouseUp);
 			addEventListener(MouseEvent.MOUSE_OUT, onMouseUp);
-			addEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
+			stage.addEventListener(Event.MOUSE_LEAVE, onMouseLeave);
 			stage.addEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
 			stage.addEventListener(KeyboardEvent.KEY_UP, onKeyUp);
 			
@@ -316,6 +317,11 @@
 			event.updateAfterEvent();
 		}
 		
+		private function onMouseLeave(event:Event):void
+		{
+			dragBitmap = false;
+		}
+		
 		private function onMouseUp(event:MouseEvent):void
 		{
 			if (!dragBitmap) return;
@@ -528,14 +534,15 @@
 			keyTimer.stop();
 			keyTimer.removeEventListener(TimerEvent.TIMER, keyUpdate);
 			
+			removeEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
 			removeEventListener(MouseEvent.MOUSE_DOWN, onMouseDown);
 			removeEventListener(MouseEvent.MOUSE_MOVE, onMouseMove);
 			removeEventListener(MouseEvent.MOUSE_UP, onMouseUp);
 			removeEventListener(MouseEvent.MOUSE_OUT, onMouseUp);
-			removeEventListener(MouseEvent.MOUSE_WHEEL, onMouseWheel);
 			
 			if (stage !== null)
 			{
+				stage.removeEventListener(Event.MOUSE_LEAVE, onMouseUp);
 				stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
 				stage.removeEventListener(KeyboardEvent.KEY_UP, onKeyUp);
 			}
