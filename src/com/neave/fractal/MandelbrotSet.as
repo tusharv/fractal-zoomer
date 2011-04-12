@@ -103,7 +103,7 @@
 				}
 			}
 			
-			bitmapData.unlock();
+			bitmapData.unlock(rect);
 			
 			// Drawing of this bounding box has completed, dispatch event
 			dispatchEvent(new Event(MandelbrotSet.DRAW_COMPLETED));
